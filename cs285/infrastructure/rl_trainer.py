@@ -180,11 +180,13 @@ class RL_Trainer(object):
 
                 - (2) collect `self.params['batch_size']` transitions
         '''
+        """
         if not itr:
             with open(load_initial_expertdata, 'rb') as f:
                 data = pk.loads(f.read())   
             return data, 0, None
-
+        """
+        
         '''
            TODO #2 ✅ : collect `batch_size` samples to be used for training
            HINT1: use sample_trajectories from utils

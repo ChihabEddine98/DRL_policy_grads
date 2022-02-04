@@ -52,7 +52,7 @@ class PGAgent(BaseAgent):
         q_values = self.calculate_q_vals(rewards_list)
 
         """ step ⓶  : get A(s_t, a_t) = Q(s_t,a_t) - V(s_t) """
-        advantages = self.estimate_advantage(observations, q_values,terminals)
+        advantages = self.estimate_advantage(observations,rewards_list,q_values,terminals)
 
         """ step ⓷  : update PG """
         train_log = self.actor.update(observations, actions, advantages,q_values)

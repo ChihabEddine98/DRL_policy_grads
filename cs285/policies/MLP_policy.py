@@ -95,7 +95,11 @@ class MLPPolicy(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
         '''
            TODO #6 ✅ : return the action that the policy prescribes
         '''
-        return ptu.to_numpy(self.forward(ptu.from_numpy(observation)))
+        obs = ptu.from_numpy(obs)
+        with torch.no_grad():
+            ac = self(obs).sample()
+        ac = ptu.to_numpy(ac)
+        return ac
 
     # update/train this policy
     def update(self, observations, actions, **kwargs):
@@ -151,12 +155,13 @@ class MLPPolicyPG(MLPPolicy):
         """
         
         # log_π and loss
-        log_pi = self.forward(observations).log_prob(actions)
-        loss = torch.neg(torch.mean(torch.mul(log_pi, advantages)))
-
-
-        # Init 
         self.optimizer.zero_grad()
+        
+        ac = self.forward(observations)
+        loss = - torch.sum(advantages*ac.log_prob(actions))
+
+
+        # Init & autodiff 😁
         loss.backward()
         self.optimizer.step()
 
