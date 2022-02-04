@@ -55,13 +55,9 @@ def mean_squared_error(a, b):
 ############################################
 
 def sample_trajectory(env, policy, max_path_length, render=False, render_mode=('rgb_array')):
-    
+    # TODO: get this from hw1
     # initialize env for the beginning of a new rollout
-    ''' 
-        TODO #10 ✅ : 
-        HINT : should be the output of resetting the env
-    '''
-    ob = env.reset()  
+    ob = env.reset() # HINT: should be the output of resetting the env
 
     # init vars
     obs, acs, rewards, next_obs, terminals, image_obs = [], [], [], [], [], []
@@ -81,11 +77,9 @@ def sample_trajectory(env, policy, max_path_length, render=False, render_mode=('
 
         # use the most recent ob to decide what to do
         obs.append(ob)
-        '''
-            TODO #11 ✅ : 
-            HINT: query the policy's get_action function
-        '''
-        ac = policy.get_action(ob)[0]
+        ac = policy.get_action(ob) # HINT: query the policy's get_action function
+        if ac.size!=1:
+            ac=ac[0]
         acs.append(ac)
 
         # take that action and record results
@@ -95,13 +89,9 @@ def sample_trajectory(env, policy, max_path_length, render=False, render_mode=('
         steps += 1
         next_obs.append(ob)
         rewards.append(rew)
-        
-        '''
-            TODO #12 ✅ : 
-            end the rollout if the rollout ended
-            HINT: rollout can end due to done, or due to max_path_length
-        '''
-        # 
+
+        # TODO end the rollout if the rollout ended
+        # HINT: rollout can end due to done, or due to max_path_length
         rollout_done = done if steps<max_path_length else 1 # HINT: this is either 0 or 1
         terminals.append(rollout_done)
 
@@ -111,10 +101,11 @@ def sample_trajectory(env, policy, max_path_length, render=False, render_mode=('
     return Path(obs, image_obs, acs, rewards, next_obs, terminals)
 
 def sample_trajectories(env, policy, min_timesteps_per_batch, max_path_length, render=False, render_mode=('rgb_array')):
+    # TODO: get this from hw1
     """
         Collect rollouts until we have collected min_timesteps_per_batch steps.
 
-        TODO #13 ✅ : implement this function
+        TODO implement this function
         Hint1: use sample_trajectory to get each path (i.e. rollout) that goes into paths
         Hint2: use get_pathlength to count the timesteps collected in each path
     """
@@ -123,19 +114,25 @@ def sample_trajectories(env, policy, min_timesteps_per_batch, max_path_length, r
     while timesteps_this_batch < min_timesteps_per_batch:
         path = sample_trajectory(env, policy, max_path_length, render, render_mode)
         paths.append(path)
-        timesteps_this_batch += get_pathlength(path)
+        timesteps_this_batch+= get_pathlength(path)
 
     return paths, timesteps_this_batch
 
 def sample_n_trajectories(env, policy, ntraj, max_path_length, render=False, render_mode=('rgb_array')):
+    # TODO: get this from hw1
     """
         Collect ntraj rollouts.
 
-        TODO #14 ✅ : implement this function
+        TODO implement this function
         Hint1: use sample_trajectory to get each path (i.e. rollout) that goes into paths
     """
-    return [sample_trajectory(env, policy, max_path_length, render, render_mode) for _ in range(ntraj)]
+    paths = []
 
+    for i in range(ntraj):
+        path = sample_trajectory(env, policy, max_path_length, render, render_mode)
+        paths.append(path)
+
+    return paths
 
 ############################################
 ############################################
