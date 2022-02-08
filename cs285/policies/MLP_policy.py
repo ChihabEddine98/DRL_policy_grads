@@ -9,8 +9,8 @@ import torch
 from torch import distributions
 
 from cs285.infrastructure import pytorch_util as ptu
-from cs285.infrastructure.utils import normalize
 from cs285.policies.base_policy import BasePolicy
+from cs285.infrastructure.utils import normalize
 
 
 class MLPPolicy(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
@@ -87,14 +87,19 @@ class MLPPolicy(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
 
     # query the policy with observation(s) to get selected action(s)
     def get_action(self, obs: np.ndarray) -> np.ndarray:
-        # TODO: get this from hw1
         if len(obs.shape) > 1:
             observation = obs
         else:
             observation = obs[None]
 
-        # TODO return the action that the policy prescribes
-        return ptu.to_numpy(self.forward(ptu.from_numpy(observation)).sample())
+        '''
+           TODO #6 ✅ : return the action that the policy prescribes
+        '''
+        obs = ptu.from_numpy(obs)
+        with torch.no_grad():
+            ac = self(obs).sample()
+        ac = ptu.to_numpy(ac)
+        return ac
 
     # update/train this policy
     def update(self, observations, actions, **kwargs):
@@ -106,14 +111,20 @@ class MLPPolicy(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
     # return more flexible objects, such as a
     # `torch.distributions.Distribution` object. It's up to you!
     def forward(self, observation: torch.FloatTensor):
-        # TODO: get this from hw1
         if self.discrete:
-            return distributions.Categorical(logits=self.logits_na(observation))
-
-        # helpful: difference between multivariatenormal and normal wrt shapes:
-        # https://ericmjl.github.io/blog/2019/5/29/reasoning-about-shapes-and-probability-distributions/
-        return distributions.MultivariateNormal(self.mean_net(observation), scale_tril = torch.diag(self.logstd.exp()))
-
+            logits = self.logits_na(observation)
+            action_distribution = distributions.Categorical(logits=logits)
+            return action_distribution
+        else:
+            batch_mean = self.mean_net(observation)
+            scale_tril = torch.diag(torch.exp(self.logstd))
+            batch_dim = batch_mean.shape[0]
+            batch_scale_tril = scale_tril.repeat(batch_dim, 1, 1)
+            action_distribution = distributions.MultivariateNormal(
+                batch_mean,
+                scale_tril=batch_scale_tril,
+            )
+            return action_distribution
 
 #####################################################
 #####################################################
@@ -128,44 +139,37 @@ class MLPPolicyPG(MLPPolicy):
         observations = ptu.from_numpy(observations)
         actions = ptu.from_numpy(actions)
         advantages = ptu.from_numpy(advantages)
-
-        # TODO: compute the loss that should be optimized when training with policy gradient
+        
+        """        
+            TODO #9 ✅: update the policy using policy gradient
+            ---------------------------------------------------
         # HINT1: Recall that the expression that we want to MAXIMIZE
             # is the expectation over collected trajectories of:
             # sum_{t=0}^{T-1} [grad [log pi(a_t|s_t) * (Q_t - b_t)]]
         # HINT2: you will want to use the `log_prob` method on the distribution returned
-            # by the `forward` method 
+            # by the `forward` method
         # HINT3: don't forget that `optimizer.step()` MINIMIZES a loss
-        log_pi = self.forward(observations).log_prob(actions)
-        print(log_pi.shape)
-        loss = torch.neg(torch.mean(torch.mul(log_pi, advantages)))
-
-        # TODO: optimize `loss` using `self.optimizer`
-        # HINT: remember to `zero_grad` first
+        # HINT4: use self.optimizer to optimize the loss. Remember to
+            # 'zero_grad' first
+        
+        """
+        
+        # log_π and loss
         self.optimizer.zero_grad()
+        
+        ac = self.forward(observations)
+        loss = - torch.sum(advantages*ac.log_prob(actions))
+
+
+        # Init & autodiff 😁
         loss.backward()
         self.optimizer.step()
 
         if self.nn_baseline:
-            ## TODO: normalize the q_values to have a mean of zero and a standard deviation of one
-            ## HINT: there is a `normalize` function in `infrastructure.utils`
-            targets = normalize(q_values, np.mean(q_values), np.mean(q_values))
-            targets = ptu.from_numpy(targets)
-
-            ## TODO: use the `forward` method of `self.baseline` to get baseline predictions
-            baseline_predictions = self.baseline.forward(observations).squeeze()
+            q_values = ptu.from_numpy(normalize(q_values, np.mean(q_values), np.mean(q_values)))
+            baseline_loss = self.baseline_loss(self.baseline.forward(observations).squeeze(), q_values)
             
-            ## avoid any subtle broadcasting bugs that can arise when dealing with arrays of shape
-            ## [ N ] versus shape [ N x 1 ]
-            ## HINT: you can use `squeeze` on torch tensors to remove dimensions of size 1
-            assert baseline_predictions.shape == targets.shape
-            
-            # TODO: compute the loss that should be optimized for training the baseline MLP (`self.baseline`)
-            # HINT: use `F.mse_loss`
-            baseline_loss = self.baseline_loss(baseline_predictions, targets)
-
-            # TODO: optimize `baseline_loss` using `self.baseline_optimizer`
-            # HINT: remember to `zero_grad` first
+            # GD Step 
             self.baseline_optimizer.zero_grad()
             baseline_loss.backward()
             self.baseline_optimizer.step()
@@ -175,17 +179,16 @@ class MLPPolicyPG(MLPPolicy):
         }
         return train_log
 
-    def run_baseline_prediction(self, obs):
+    def run_baseline_prediction(self, observations):
         """
-            Helper function that converts `obs` to a tensor,
+            Helper function that converts `observations` to a tensor,
             calls the forward method of the baseline MLP,
             and returns a np array
 
-            Input: `obs`: np.ndarray of size [N, 1]
+            Input: `observations`: np.ndarray of size [N, 1]
             Output: np.ndarray of size [N]
 
         """
-        obs = ptu.from_numpy(obs)
-        predictions = self.baseline(obs)
-        return ptu.to_numpy(predictions)[:, 0]
-
+        observations = ptu.from_numpy(observations)
+        pred = self.baseline(observations)
+        return ptu.to_numpy(pred.squeeze())
